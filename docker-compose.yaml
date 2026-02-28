@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: notesuser
+      POSTGRES_PASSWORD: notespass123
+      POSTGRES_DB: notesdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notesuser -d notesdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notes_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://notesuser:notespass123@db:5432/notesdb
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - notes_network
+
+volumes:
+  postgres_data:
+
+networks:
+  notes_network:
