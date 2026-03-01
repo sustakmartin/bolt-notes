@@ -21,7 +21,7 @@ async function initializeDatabase() {
 
   while (retries < maxRetries) {
     try {
-      console.log('Attempting to connect to database...');
+      console.log('Attempting to co2nnect to database...');
       const client = await pool.connect();
 
       await client.query(`
