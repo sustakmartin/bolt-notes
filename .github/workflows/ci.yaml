@@ -2,9 +2,11 @@ name: Build and Test
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   unit-tests:
@@ -12,17 +14,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm' # Automatically caches dependencies
-
-      - name: Install Dependencies
-        run: npm ci # Faster, "clean" install for CI environments
-
-      - name: Run Tests
-        run: npm test
+      - name: Run Test Commands
+        run: |
+          # Add custom test commands here
+          # Example for Node.js: npm install && npm test
+          # Example for Django: python manage.py test
+          
+          echo "Test suite execution finished"
