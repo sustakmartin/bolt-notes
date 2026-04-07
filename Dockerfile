@@ -18,6 +18,6 @@ COPY --chown=nodejs:nodejs . .
 
 USER nodejs
 
-EXPOSE 3000
+EXPOSE 3068
 
 CMD ["node", "server.js"]
