@@ -51,6 +51,12 @@
             display: none;
         }
 
+        .panel-stack {
+            display: grid;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
         .form-group {
             margin-bottom: 1rem;
         }
@@ -251,6 +257,84 @@
             font-weight: 600;
         }
 
+        .upload-helper {
+            color: #475569;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        .file-picker {
+            width: 100%;
+            border: 2px dashed #cbd5e1;
+            border-radius: 10px;
+            padding: 1rem;
+            background: #f8fafc;
+            cursor: pointer;
+        }
+
+        .selected-files {
+            margin-top: 1rem;
+            color: #334155;
+            font-size: 0.95rem;
+        }
+
+        .selected-files ul {
+            margin: 0.5rem 0 0;
+            padding-left: 1.25rem;
+        }
+
+        .progress-shell {
+            width: 100%;
+            height: 12px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-bar {
+            width: 0;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(135deg, #22c55e 0%, #0ea5e9 100%);
+            transition: width 0.2s ease;
+        }
+
+        .upload-meta {
+            margin-top: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+            color: #475569;
+            font-size: 0.95rem;
+        }
+
+        .upload-results {
+            margin-top: 1rem;
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .upload-result {
+            padding: 0.9rem 1rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .upload-result strong {
+            display: block;
+            color: #0f172a;
+            margin-bottom: 0.25rem;
+        }
+
+        .upload-result span {
+            color: #475569;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+
         @media (max-width: 768px) {
             body {
                 padding: 1rem;
@@ -297,18 +381,41 @@
             </form>
         </div>
 
-        <div class="new-note-form" id="noteFormCard">
-            <form id="noteForm">
-                <div class="form-group">
-                    <label for="noteTitle">Title</label>
-                    <input type="text" id="noteTitle" placeholder="Enter note title" required>
-                </div>
-                <div class="form-group">
-                    <label for="noteContent">Content</label>
-                    <textarea id="noteContent" placeholder="Write your note here..." required></textarea>
-                </div>
-                <button type="submit" class="btn">Add Note</button>
-            </form>
+        <div class="panel-stack">
+            <div class="new-note-form" id="noteFormCard">
+                <form id="noteForm">
+                    <div class="form-group">
+                        <label for="noteTitle">Title</label>
+                        <input type="text" id="noteTitle" placeholder="Enter note title" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="noteContent">Content</label>
+                        <textarea id="noteContent" placeholder="Write your note here..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn">Add Note</button>
+                </form>
+            </div>
+
+            <div class="new-note-form" id="uploadCard">
+                <form id="uploadForm">
+                    <div class="form-group">
+                        <label for="fileInput">Upload files</label>
+                        <p class="upload-helper">Files are sent directly to your Supabase storage bucket using your active session JWT.</p>
+                        <input type="file" id="fileInput" class="file-picker" multiple>
+                    </div>
+                    <div id="selectedFiles" class="selected-files hidden"></div>
+                    <button type="submit" class="btn" id="uploadBtn">Upload to Storage</button>
+                    <div id="uploadStatus" class="status-text hidden"></div>
+                    <div class="progress-shell hidden" id="uploadProgressShell">
+                        <div class="progress-bar" id="uploadProgressBar"></div>
+                    </div>
+                    <div class="upload-meta hidden" id="uploadMeta">
+                        <span id="uploadProgressLabel">0%</span>
+                        <span id="uploadTargetLabel"></span>
+                    </div>
+                    <div id="uploadResults" class="upload-results hidden"></div>
+                </form>
+            </div>
         </div>
 
         <div id="notesContainer" class="loading">Loading notes...</div>
@@ -331,17 +438,32 @@
         const logoutBtn = document.getElementById('logoutBtn');
         const sessionBar = document.getElementById('sessionBar');
         const sessionEmail = document.getElementById('sessionEmail');
+        const uploadCard = document.getElementById('uploadCard');
+        const uploadForm = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('fileInput');
+        const selectedFiles = document.getElementById('selectedFiles');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const uploadProgressShell = document.getElementById('uploadProgressShell');
+        const uploadProgressBar = document.getElementById('uploadProgressBar');
+        const uploadMeta = document.getElementById('uploadMeta');
+        const uploadProgressLabel = document.getElementById('uploadProgressLabel');
+        const uploadTargetLabel = document.getElementById('uploadTargetLabel');
+        const uploadResults = document.getElementById('uploadResults');
 
         let supabaseClient = null;
         let session = null;
+        let uploadProgressTimer = null;
 
         function toggleAuthUI(isAuthed) {
             authCard.classList.toggle('hidden', isAuthed);
             noteFormCard.style.display = isAuthed ? 'block' : 'none';
+            uploadCard.style.display = isAuthed ? 'block' : 'none';
             sessionBar.style.display = isAuthed ? 'flex' : 'none';
             notesContainer.className = isAuthed ? 'loading' : 'empty-state';
             if (!isAuthed) {
                 notesContainer.innerHTML = '<div class="empty-state"><h2>Login required</h2><p>Please sign in to view your notes.</p></div>';
+                resetUploadUI();
             }
         }
 
@@ -351,8 +473,120 @@
             authStatus.style.color = isError ? '#ef4444' : '#22c55e';
         }
 
+        function showUploadStatus(message, isError = false) {
+            uploadStatus.textContent = message;
+            uploadStatus.classList.toggle('hidden', !message);
+            uploadStatus.style.color = isError ? '#ef4444' : '#22c55e';
+        }
+
+        function getEnvConfig() {
+            return window.__ENV__ ?? {};
+        }
+
+        function isStorageConfigured() {
+            const env = getEnvConfig();
+            return Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY && env.SUPABASE_STORAGE_BUCKET);
+        }
+
+        function resetUploadUI() {
+            clearUploadProgressTimer();
+            uploadForm.reset();
+            selectedFiles.innerHTML = '';
+            selectedFiles.classList.add('hidden');
+            uploadResults.innerHTML = '';
+            uploadResults.classList.add('hidden');
+            showUploadStatus('');
+            setUploadProgress(0);
+            uploadProgressShell.classList.add('hidden');
+            uploadMeta.classList.add('hidden');
+            uploadTargetLabel.textContent = '';
+            uploadBtn.disabled = false;
+        }
+
+        function clearUploadProgressTimer() {
+            if (uploadProgressTimer) {
+                clearInterval(uploadProgressTimer);
+                uploadProgressTimer = null;
+            }
+        }
+
+        function setUploadProgress(value) {
+            const boundedValue = Math.max(0, Math.min(100, value));
+            uploadProgressBar.style.width = `${boundedValue}%`;
+            uploadProgressLabel.textContent = `${Math.round(boundedValue)}%`;
+        }
+
+        function startUploadSegment(baseProgress, segmentSize) {
+            clearUploadProgressTimer();
+            let currentProgress = baseProgress;
+            setUploadProgress(currentProgress);
+            uploadProgressShell.classList.remove('hidden');
+            uploadMeta.classList.remove('hidden');
+
+            uploadProgressTimer = setInterval(() => {
+                const targetProgress = baseProgress + segmentSize * 0.9;
+                currentProgress = Math.min(targetProgress, currentProgress + Math.max(segmentSize * 0.08, 1));
+                setUploadProgress(currentProgress);
+            }, 180);
+        }
+
+        function renderSelectedFiles(files) {
+            if (!files.length) {
+                selectedFiles.innerHTML = '';
+                selectedFiles.classList.add('hidden');
+                return;
+            }
+
+            selectedFiles.classList.remove('hidden');
+            selectedFiles.innerHTML = `
+                <strong>Selected ${files.length} file${files.length === 1 ? '' : 's'}</strong>
+                <ul>
+                    ${files.map(file => `<li>${escapeHtml(file.name)} (${formatFileSize(file.size)})</li>`).join('')}
+                </ul>
+            `;
+        }
+
+        function renderUploadResults(items) {
+            if (!items.length) {
+                uploadResults.innerHTML = '';
+                uploadResults.classList.add('hidden');
+                return;
+            }
+
+            uploadResults.classList.remove('hidden');
+            uploadResults.innerHTML = items.map(item => `
+                <div class="upload-result">
+                    <strong>${escapeHtml(item.fileName)}</strong>
+                    <span>${escapeHtml(item.fullPath)}</span>
+                </div>
+            `).join('');
+        }
+
+        function formatFileSize(size) {
+            if (size < 1024) return `${size} B`;
+            if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+            if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+            return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+        }
+
+        function sanitizeFileName(fileName) {
+            return fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        }
+
+        function buildStoragePath(userId, fileName, index) {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            return `${userId}/${timestamp}-${index}-${sanitizeFileName(fileName)}`;
+        }
+
+        function createStorageClient(accessToken) {
+            const env = getEnvConfig();
+            return window.supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+                accessToken: async () => session?.access_token || accessToken || null
+            });
+        }
+
         async function initSupabase() {
-            const { __ENV__ } = window;
+            const __ENV__ = getEnvConfig();
             if (!__ENV__?.SUPABASE_URL || !__ENV__?.SUPABASE_ANON_KEY) {
                 notesContainer.innerHTML = '<div class="empty-state"><h2>Env missing</h2><p>Supabase URL or anon key not provided.</p></div>';
                 return;
@@ -374,6 +608,13 @@
             if (currentSession?.user) {
                 sessionEmail.textContent = currentSession.user.email;
                 toggleAuthUI(true);
+                if (!isStorageConfigured()) {
+                    showUploadStatus('Storage upload is unavailable because SUPABASE_STORAGE_BUCKET is missing.', true);
+                    uploadBtn.disabled = true;
+                } else {
+                    uploadBtn.disabled = false;
+                    showUploadStatus('');
+                }
                 fetchNotes();
             } else {
                 toggleAuthUI(false);
@@ -444,6 +685,10 @@
 
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
+
+        fileInput.addEventListener('change', () => {
+            renderSelectedFiles(Array.from(fileInput.files || []));
+        });
 
         noteForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -527,6 +772,83 @@
             await supabaseClient.auth.signOut();
             session = null;
             handleSessionChange(null);
+        });
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const env = getEnvConfig();
+            const files = Array.from(fileInput.files || []);
+
+            if (!session?.access_token || !session?.user?.id) {
+                showUploadStatus('You must be signed in before uploading files.', true);
+                return;
+            }
+
+            if (!isStorageConfigured()) {
+                showUploadStatus('Storage upload is unavailable because SUPABASE_STORAGE_BUCKET is missing.', true);
+                return;
+            }
+
+            if (!files.length) {
+                showUploadStatus('Choose at least one file to upload.', true);
+                return;
+            }
+
+            const storageClient = createStorageClient(session.access_token);
+            const uploadedItems = [];
+            uploadBtn.disabled = true;
+            uploadResults.classList.add('hidden');
+            uploadResults.innerHTML = '';
+            showUploadStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`);
+
+            try {
+                for (let index = 0; index < files.length; index += 1) {
+                    const file = files[index];
+                    const baseProgress = (index / files.length) * 100;
+                    const segmentSize = 100 / files.length;
+                    const targetPath = buildStoragePath(session.user.id, file.name, index + 1);
+
+                    uploadTargetLabel.textContent = `Uploading ${file.name} to ${env.SUPABASE_STORAGE_BUCKET}/${targetPath}`;
+                    startUploadSegment(baseProgress, segmentSize);
+
+                    const { data, error } = await storageClient.storage
+                        .from(env.SUPABASE_STORAGE_BUCKET)
+                        .upload(targetPath, file, {
+                            cacheControl: '3600',
+                            contentType: file.type || 'application/octet-stream',
+                            upsert: false
+                        });
+
+                    clearUploadProgressTimer();
+
+                    if (error) {
+                        throw error;
+                    }
+
+                    setUploadProgress(baseProgress + segmentSize);
+                    uploadedItems.push({
+                        fileName: file.name,
+                        fullPath: data.fullPath
+                    });
+                }
+
+                setUploadProgress(100);
+                showUploadStatus(`Uploaded ${uploadedItems.length} file${uploadedItems.length === 1 ? '' : 's'} successfully.`);
+                renderUploadResults(uploadedItems);
+                fileInput.value = '';
+                renderSelectedFiles([]);
+            } catch (error) {
+                console.error('Upload error:', error);
+                showUploadStatus(error.message || 'Upload failed. Please try again.', true);
+            } finally {
+                clearUploadProgressTimer();
+                uploadBtn.disabled = false;
+                if (!uploadStatus.classList.contains('hidden')) {
+                    uploadProgressShell.classList.remove('hidden');
+                    uploadMeta.classList.remove('hidden');
+                }
+            }
         });
 
         initSupabase();

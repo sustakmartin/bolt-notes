@@ -7,6 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3068;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET;
 const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 if (!isSupabaseConfigured) {
@@ -31,12 +32,14 @@ app.get('/env.js', (req, res) => {
     SUPABASE_ANON_KEY: isSupabaseConfigured
       ? SUPABASE_ANON_KEY.slice(0, 4) + '...' + SUPABASE_ANON_KEY.slice(-4)
       : '',
+    SUPABASE_STORAGE_BUCKET: SUPABASE_STORAGE_BUCKET || '',
   };
 
   res.type('application/javascript').send(`
     window.__ENV__ = ${JSON.stringify({
       SUPABASE_URL: SUPABASE_URL || '',
       SUPABASE_ANON_KEY: SUPABASE_ANON_KEY || '',
+      SUPABASE_STORAGE_BUCKET: SUPABASE_STORAGE_BUCKET || '',
     })};
     console.log('Loaded public env:', ${JSON.stringify(envVars)});
   `);
@@ -163,12 +166,14 @@ app.get('/health', async (req, res) => {
       status: 'healthy',
       database: 'connected',
       supabase: isSupabaseConfigured ? 'configured' : 'missing',
+      storageBucket: SUPABASE_STORAGE_BUCKET ? 'configured' : 'missing',
     });
   } catch (err) {
     res.status(503).json({
       status: 'unhealthy',
       database: 'disconnected',
       supabase: isSupabaseConfigured ? 'configured' : 'missing',
+      storageBucket: SUPABASE_STORAGE_BUCKET ? 'configured' : 'missing',
       error: err.message,
     });
   }
