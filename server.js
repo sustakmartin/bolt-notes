@@ -7,12 +7,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables');
+if (!isSupabaseConfigured) {
+  console.warn('Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables');
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://notesuser:notespass123@localhost:5432/notesdb',
@@ -26,17 +27,26 @@ app.use(express.static('public'));
 
 app.get('/env.js', (req, res) => {
   const envVars = {
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY: SUPABASE_ANON_KEY.slice(0, 4) + '...' + SUPABASE_ANON_KEY.slice(-4),
+    SUPABASE_URL: SUPABASE_URL || '',
+    SUPABASE_ANON_KEY: isSupabaseConfigured
+      ? SUPABASE_ANON_KEY.slice(0, 4) + '...' + SUPABASE_ANON_KEY.slice(-4)
+      : '',
   };
 
   res.type('application/javascript').send(`
-    window.__ENV__ = ${JSON.stringify({ SUPABASE_URL, SUPABASE_ANON_KEY })};
+    window.__ENV__ = ${JSON.stringify({
+      SUPABASE_URL: SUPABASE_URL || '',
+      SUPABASE_ANON_KEY: SUPABASE_ANON_KEY || '',
+    })};
     console.log('Loaded public env:', ${JSON.stringify(envVars)});
   `);
 });
 
 async function authenticateRequest(req, res, next) {
+  if (!supabase) {
+    return res.status(503).json({ error: 'Supabase auth is not configured' });
+  }
+
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -149,9 +159,18 @@ app.delete('/api/notes/:id', async (req, res) => {
 app.get('/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'healthy', database: 'connected' });
+    res.json({
+      status: 'healthy',
+      database: 'connected',
+      supabase: isSupabaseConfigured ? 'configured' : 'missing',
+    });
   } catch (err) {
-    res.status(503).json({ status: 'unhealthy', database: 'disconnected', error: err.message });
+    res.status(503).json({
+      status: 'unhealthy',
+      database: 'disconnected',
+      supabase: isSupabaseConfigured ? 'configured' : 'missing',
+      error: err.message,
+    });
   }
 });
 
