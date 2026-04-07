@@ -29,6 +29,7 @@ services:
       DATABASE_URL: postgresql://notesuser:notespass123@db:5432/notesdb
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3068/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
