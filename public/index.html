@@ -280,7 +280,7 @@
 
         <div id="authCard" class="auth-card">
             <h2 style="margin-bottom: 0.5rem;">Sign in to continue</h2>
-            <p class="helper">Use your Supabase email/password account. New here? Create an account below.</p>
+            <p class="helper">Use your existing Supabase email/password account to access your notes.</p>
             <form id="loginForm" style="margin-top: 1rem;">
                 <div class="form-group">
                     <label for="emailInput">Email</label>
@@ -292,7 +292,6 @@
                 </div>
                 <div class="auth-actions">
                     <button type="submit" class="btn">Sign In</button>
-                    <button type="button" id="signupBtn" class="btn btn-secondary">Create Account</button>
                 </div>
                 <div id="authStatus" class="status-text hidden"></div>
             </form>
@@ -326,7 +325,6 @@
         const authCard = document.getElementById('authCard');
         const noteFormCard = document.getElementById('noteFormCard');
         const loginForm = document.getElementById('loginForm');
-        const signupBtn = document.getElementById('signupBtn');
         const emailInput = document.getElementById('emailInput');
         const passwordInput = document.getElementById('passwordInput');
         const authStatus = document.getElementById('authStatus');
@@ -522,22 +520,6 @@
             }
 
             showStatus('Signed in successfully');
-        });
-
-        signupBtn.addEventListener('click', async () => {
-            if (!supabaseClient) return;
-            showStatus('Creating account...', false);
-            const email = emailInput.value.trim();
-            const password = passwordInput.value.trim();
-
-            const { error } = await supabaseClient.auth.signUp({ email, password });
-
-            if (error) {
-                showStatus(error.message, true);
-                return;
-            }
-
-            showStatus('Check your email to confirm your account.');
         });
 
         logoutBtn.addEventListener('click', async () => {
