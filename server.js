@@ -1,9 +1,18 @@
 const express = require('express');
 const { Pool } = require('pg');
+const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables');
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://notesuser:notespass123@localhost:5432/notesdb',
@@ -14,6 +23,38 @@ const pool = new Pool({
 
 app.use(express.json());
 app.use(express.static('public'));
+
+app.get('/env.js', (req, res) => {
+  const envVars = {
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY: SUPABASE_ANON_KEY.slice(0, 4) + '...' + SUPABASE_ANON_KEY.slice(-4),
+  };
+
+  res.type('application/javascript').send(`
+    window.__ENV__ = ${JSON.stringify({ SUPABASE_URL, SUPABASE_ANON_KEY })};
+    console.log('Loaded public env:', ${JSON.stringify(envVars)});
+  `);
+});
+
+async function authenticateRequest(req, res, next) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if (error || !data?.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  req.user = data.user;
+  return next();
+}
+
+app.use('/api', authenticateRequest);
 
 async function initializeDatabase() {
   const maxRetries = 10;
